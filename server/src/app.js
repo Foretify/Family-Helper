@@ -46,7 +46,7 @@ app.use(session({
   },
 }));
 
-// ── CSRF protection (double-submit cookie pattern) ────────────────────────────
+// ── CSRF protection (synchronizer token pattern) ─────────────────────────────
 // Issue a token — must come before the protection middleware
 app.get('/api/csrf-token', csrfTokenHandler);
 // Validate on all mutating API requests
