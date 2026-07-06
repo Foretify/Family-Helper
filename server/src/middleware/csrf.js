@@ -1,60 +1,49 @@
 /**
- * Lightweight CSRF protection using the double-submit cookie pattern.
+ * Lightweight CSRF protection using the synchronizer token pattern.
  *
  * How it works:
- *  - GET /api/csrf-token sets a non-HttpOnly "csrf_token" cookie and returns
- *    the same value in JSON so the SPA can read it.
+ *  - GET /api/csrf-token generates a random token, stores it in the session,
+ *    and returns it in JSON. The SPA reads this on startup.
  *  - Every state-mutating request (POST/PUT/PATCH/DELETE) must include the
  *    token in the "x-csrf-token" request header.
- *  - The middleware verifies the header value matches the cookie value.
+ *  - The middleware verifies the header value matches the session-stored token.
  *
- * This stops cross-site form submissions because an attacker page cannot read
- * the cookie value (SameSite=Strict + cross-origin restriction) and therefore
- * cannot set the matching header.
+ * Because the token is tied to the session and validated server-side, a
+ * cross-origin attacker cannot forge requests even if they can set cookies,
+ * since they cannot read the session-bound token value.
  */
 
 const { randomBytes } = require('node:crypto');
 
-const CSRF_COOKIE = 'csrf_token';
 const CSRF_HEADER = 'x-csrf-token';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
- * Express route handler — issues a fresh CSRF token.
+ * Express route handler — issues a fresh CSRF token bound to the session.
  * The SPA calls this on startup and after any 403 CSRF failure.
  */
 function csrfTokenHandler(req, res) {
   const token = randomBytes(32).toString('hex');
-  res.cookie(CSRF_COOKIE, token, {
-    httpOnly: false,          // readable by JS so the SPA can send it as a header
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  req.session.csrfToken = token;
   res.json({ csrfToken: token });
 }
 
 /**
  * Express middleware — validates the CSRF token on mutating requests.
+ * The token must be present in both the session and the request header,
+ * and the values must match exactly.
  */
 function csrfProtection(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
 
-  // Parse the csrf_token cookie manually (express-session doesn't expose req.cookies)
-  const cookieHeader = req.headers.cookie || '';
-  const cookieToken = cookieHeader
-    .split(';')
-    .map(c => c.trim().split('='))
-    .find(([k]) => k === CSRF_COOKIE)?.[1];
-
-  const headerToken = req.headers[CSRF_HEADER];
+  const sessionToken = req.session?.csrfToken;
+  const requestToken = req.headers[CSRF_HEADER];
 
   if (
-    !cookieToken ||
-    !headerToken ||
-    cookieToken.length !== 64 ||   // 32 bytes = 64 hex chars
-    cookieToken !== headerToken
+    typeof sessionToken !== 'string' ||
+    typeof requestToken !== 'string' ||
+    sessionToken.length !== 64 ||     // 32 bytes → 64 hex chars
+    requestToken !== sessionToken
   ) {
     return res.status(403).json({ error: 'Invalid CSRF token' });
   }
