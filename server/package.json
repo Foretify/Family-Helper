@@ -1,0 +1,20 @@
+{
+  "name": "family-helper-server",
+  "version": "1.0.0",
+  "description": "Family Task Tracker API server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "memorystore": "^1.6.7",
+    "uuid": "^10.0.0"
+  }
+}
